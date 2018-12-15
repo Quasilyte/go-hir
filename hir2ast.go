@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"go/ast"
 	"go/token"
+	"go/types"
 )
 
 func astWithParens(parens bool, e ast.Expr) ast.Expr {
@@ -57,7 +58,10 @@ func (v *FloatVal) GoExpr() ast.Expr {
 		return astWithParens(v.Parens, v.Source)
 	}
 
-	return nil
+	return astWithParens(v.Parens, &ast.BasicLit{
+		Kind:  token.FLOAT,
+		Value: fmt.Sprint(v.Val),
+	})
 }
 
 func (v *StringVal) GoExpr() ast.Expr {
@@ -88,7 +92,7 @@ func (op *OpMul) GoExpr() ast.Expr {
 }
 
 func (v *Var) GoExpr() ast.Expr {
-	return &ast.Ident{Name: v.Obj.Name()}
+	return astWithParens(v.Parens, &ast.Ident{Name: v.Obj.Name()})
 }
 
 func (assign *Assign) GoStmt() ast.Stmt {
@@ -104,7 +108,11 @@ func (assign *Assign) GoStmt() ast.Stmt {
 }
 
 func (n *Nil) GoExpr() ast.Expr {
-	return &ast.Ident{Name: "nil"}
+	return astWithParens(n.Parens, &ast.Ident{Name: "nil"})
+}
+
+func (blank *Blank) GoExpr() ast.Expr {
+	return &ast.Ident{Name: "_"}
 }
 
 func (decl *VarDecl) GoStmt() ast.Stmt {
@@ -130,4 +138,21 @@ func (decl *VarDecl) GoStmt() ast.Stmt {
 			Specs: specs,
 		},
 	}
+}
+
+func (tconv *TypeConv) GoExpr() ast.Expr {
+	return astWithParens(tconv.Parens, &ast.CallExpr{
+		Fun:  typeToAst(tconv.Typ),
+		Args: []ast.Expr{tconv.Arg.GoExpr()},
+	})
+}
+
+func typeToAst(typ types.Type) ast.Expr {
+	switch typ := typ.(type) {
+	case *types.Basic:
+		return &ast.Ident{Name: typ.Name()}
+	case *types.Pointer:
+		return &ast.StarExpr{X: typeToAst(typ.Elem())}
+	}
+	panic(fmt.Sprintf("can't convert %T to ast expr", typ))
 }

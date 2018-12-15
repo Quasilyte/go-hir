@@ -7,6 +7,7 @@ import (
 	"go/token"
 	"go/types"
 
+	"github.com/go-toolsmith/typep"
 	"golang.org/x/tools/go/ast/astutil"
 )
 
@@ -16,13 +17,13 @@ type converter struct {
 
 func ConvertFunc(info *types.Info, decl *ast.FuncDecl) *Block {
 	conv := &converter{info: info}
-	return conv.block(decl.Body)
-}
-
-func (conv *converter) block(b *ast.BlockStmt) *Block {
-	if b == nil {
+	if decl.Body == nil {
 		return &Block{}
 	}
+	return conv.blockStmt(decl.Body)
+}
+
+func (conv *converter) blockStmt(b *ast.BlockStmt) *Block {
 	return &Block{
 		Pos:  b.Pos(),
 		List: conv.stmtList(b.List),
@@ -55,6 +56,8 @@ func (conv *converter) expr(expr ast.Expr) Expr {
 		return conv.parenExpr(expr)
 	case *ast.BinaryExpr:
 		return conv.binaryExpr(expr)
+	case *ast.CallExpr:
+		return conv.callExpr(expr)
 
 	default:
 		panic(fmt.Sprintf("unhandled expr: %T", expr))
@@ -72,7 +75,7 @@ func (conv *converter) ident(id *ast.Ident) Expr {
 			}
 			return &IntVal{
 				Pos:    id.Pos(),
-				Type:   tv.Type,
+				Typ:    tv.Type,
 				Val:    v,
 				Source: id,
 			}
@@ -84,7 +87,7 @@ func (conv *converter) ident(id *ast.Ident) Expr {
 			}
 			return &FloatVal{
 				Pos:    id.Pos(),
-				Type:   tv.Type,
+				Typ:    tv.Type,
 				Val:    v,
 				Source: id,
 			}
@@ -92,7 +95,7 @@ func (conv *converter) ident(id *ast.Ident) Expr {
 		case constant.String:
 			return &StringVal{
 				Pos:    id.Pos(),
-				Type:   tv.Type,
+				Typ:    tv.Type,
 				Val:    constant.StringVal(tv.Value),
 				Source: id,
 			}
@@ -103,14 +106,14 @@ func (conv *converter) ident(id *ast.Ident) Expr {
 	}
 
 	if id.Name == "nil" {
-		return &Nil{Type: tv.Type}
+		return &Nil{Typ: tv.Type}
 	}
 
 	obj, ok := conv.info.ObjectOf(id).(*types.Var)
 	if !ok || obj == nil {
 		panic(fmt.Sprintf("unexpected nil object for %s", id.Name))
 	}
-	return &Var{Obj: obj}
+	return &Var{Obj: obj, Pos: id.Pos()}
 }
 
 func (conv *converter) basicLit(lit *ast.BasicLit) Expr {
@@ -122,9 +125,10 @@ func (conv *converter) basicLit(lit *ast.BasicLit) Expr {
 			panic(fmt.Sprintf("unexpected !exact int value (%s)", lit.Value))
 		}
 		return &IntVal{
-			Pos:  lit.Pos(),
-			Type: tv.Type,
-			Val:  v,
+			Pos:    lit.Pos(),
+			Typ:    tv.Type,
+			Val:    v,
+			Source: lit,
 		}
 
 	case constant.Float:
@@ -133,16 +137,18 @@ func (conv *converter) basicLit(lit *ast.BasicLit) Expr {
 			panic(fmt.Sprintf("unexpected !exact float value (%s)", lit.Value))
 		}
 		return &FloatVal{
-			Pos:  lit.Pos(),
-			Type: tv.Type,
-			Val:  v,
+			Pos:    lit.Pos(),
+			Typ:    tv.Type,
+			Val:    v,
+			Source: lit,
 		}
 
 	case constant.String:
 		return &StringVal{
-			Pos:  lit.Pos(),
-			Type: tv.Type,
-			Val:  constant.StringVal(tv.Value),
+			Pos:    lit.Pos(),
+			Typ:    tv.Type,
+			Val:    constant.StringVal(tv.Value),
+			Source: lit,
 		}
 
 	default:
@@ -154,6 +160,8 @@ func (conv *converter) basicLit(lit *ast.BasicLit) Expr {
 func (conv *converter) parenExpr(paren *ast.ParenExpr) Expr {
 	// Reduce any amount of surrounding parenthesis to 1.
 	expr := conv.expr(astutil.Unparen(paren))
+
+	// Now assign parenthesis attribute.
 	switch expr := expr.(type) {
 	case *IntVal:
 		expr.Parens = true
@@ -165,27 +173,48 @@ func (conv *converter) parenExpr(paren *ast.ParenExpr) Expr {
 		expr.Parens = true
 	case *OpMul:
 		expr.Parens = true
+	case *Nil:
+		expr.Parens = true
+	case *TypeConv:
+		expr.Parens = true
+	case *Var:
+		expr.Parens = true
 	}
+
 	return expr
 }
 
 func (conv *converter) binaryExpr(e *ast.BinaryExpr) Expr {
-	typ := conv.info.TypeOf(e)
 	x := conv.expr(e.X)
 	y := conv.expr(e.Y)
 	switch e.Op {
 	case token.ADD:
-		return &OpAdd{Pos: e.Pos(), Type: typ, LHS: x, RHS: y}
+		return &OpAdd{Pos: e.Pos(), LHS: x, RHS: y}
 	case token.MUL:
-		return &OpMul{Pos: e.Pos(), Type: typ, LHS: x, RHS: y}
+		return &OpMul{Pos: e.Pos(), LHS: x, RHS: y}
 
 	default:
 		panic(fmt.Sprintf("unhandled binary expr: %s", e.Op.String()))
 	}
 }
 
+func (conv *converter) callExpr(call *ast.CallExpr) Expr {
+	if typep.IsTypeExpr(conv.info, call.Fun) {
+		typ := conv.info.TypeOf(call)
+		return &TypeConv{
+			Typ: typ,
+			Pos: call.Pos(),
+			Arg: conv.expr(call.Args[0]),
+		}
+	}
+
+	panic("can't handle normal calls yet")
+}
+
 func (conv *converter) stmt(stmt ast.Stmt) Stmt {
 	switch stmt := stmt.(type) {
+	case *ast.BlockStmt:
+		return conv.blockStmt(stmt)
 	case *ast.AssignStmt:
 		return conv.assignStmt(stmt)
 	case *ast.DeclStmt:
@@ -230,38 +259,19 @@ func (conv *converter) declStmt(stmt *ast.DeclStmt) Stmt {
 	}
 }
 
-func (conv *converter) astZeroVal(typ types.Type) ast.Expr {
-	switch typ := typ.Underlying().(type) {
-	case *types.Basic:
-		switch flags := typ.Info(); {
-		case flags&types.IsNumeric != 0:
-			return &ast.BasicLit{Value: "0"}
-		case flags&types.IsString != 0:
-			return &ast.BasicLit{Value: `""`}
-		}
-	}
-	return &ast.Ident{Name: "nil"}
-}
-
-func (conv *converter) identsListToExprList(idents []*ast.Ident) []ast.Expr {
-	out := make([]ast.Expr, len(idents))
-	for i := range idents {
-		out[i] = idents[i]
-	}
-	return out
-}
-
 func (conv *converter) specToAssign(spec *ast.ValueSpec) *Assign {
 	out := &Assign{
 		Pos: spec.Pos(),
 		LHS: make([]Expr, len(spec.Names)),
 	}
 	for i, id := range spec.Names {
-		if id.Name != "_" {
-			def, ok := conv.info.Defs[id].(*types.Var)
-			if ok {
-				out.Defs = append(out.Defs, def)
-			}
+		if id.Name == "_" {
+			out.LHS[i] = &Blank{Pos: id.Pos()}
+			continue
+		}
+		def, ok := conv.info.Defs[id].(*types.Var)
+		if ok {
+			out.Defs = append(out.Defs, def)
 		}
 		out.LHS[i] = conv.expr(id)
 	}
@@ -285,14 +295,14 @@ func (conv *converter) makeZeroVal(pos token.Pos, typ types.Type) Expr {
 	case *types.Basic:
 		switch flags := typ.Info(); {
 		case flags&types.IsInteger != 0:
-			return &IntVal{Type: typ, Pos: pos}
+			return &IntVal{Typ: typ, Pos: pos}
 		case flags&types.IsFloat != 0:
-			return &FloatVal{Type: typ, Pos: pos}
+			return &FloatVal{Typ: typ, Pos: pos}
 		case flags&types.IsString != 0:
-			return &StringVal{Type: typ, Pos: pos}
+			return &StringVal{Typ: typ, Pos: pos}
 		}
 	case *types.Pointer:
-		return &Nil{Type: typ}
+		return &Nil{Typ: typ}
 	}
 	panic(fmt.Sprintf("can't make zero value for %s", typ.String()))
 }
@@ -303,8 +313,12 @@ func (conv *converter) assignStmt(assign *ast.AssignStmt) *Assign {
 		LHS: make([]Expr, len(assign.Lhs)),
 		RHS: make([]Expr, len(assign.Rhs)),
 	}
-	for i, lhs := range assign.Rhs {
-		if id, ok := lhs.(*ast.Ident); ok && id.Name != "_" {
+	for i, lhs := range assign.Lhs {
+		if id, ok := lhs.(*ast.Ident); ok {
+			if id.Name == "_" {
+				out.LHS[i] = &Blank{Pos: id.Pos()}
+				continue
+			}
 			def, ok := conv.info.Defs[id].(*types.Var)
 			if ok {
 				out.Defs = append(out.Defs, def)
