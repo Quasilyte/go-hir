@@ -11,61 +11,53 @@ import (
 	"golang.org/x/tools/go/ast/astutil"
 )
 
-type converter struct {
+type hirBuilder struct {
 	info *types.Info
 }
 
-func ConvertFunc(info *types.Info, decl *ast.FuncDecl) *Block {
-	conv := &converter{info: info}
-	if decl.Body == nil {
-		return &Block{}
-	}
-	return conv.blockStmt(decl.Body)
-}
-
-func (conv *converter) blockStmt(b *ast.BlockStmt) *Block {
+func (hb *hirBuilder) blockStmt(b *ast.BlockStmt) *Block {
 	return &Block{
 		Pos:  b.Pos(),
-		List: conv.stmtList(b.List),
+		List: hb.stmtList(b.List),
 	}
 }
 
-func (conv *converter) exprList(in []ast.Expr) []Expr {
+func (hb *hirBuilder) exprList(in []ast.Expr) []Expr {
 	out := make([]Expr, len(in))
 	for i := range in {
-		out[i] = conv.expr(in[i])
+		out[i] = hb.expr(in[i])
 	}
 	return out
 }
 
-func (conv *converter) stmtList(in []ast.Stmt) []Stmt {
+func (hb *hirBuilder) stmtList(in []ast.Stmt) []Stmt {
 	out := make([]Stmt, len(in))
 	for i := range in {
-		out[i] = conv.stmt(in[i])
+		out[i] = hb.stmt(in[i])
 	}
 	return out
 }
 
-func (conv *converter) expr(expr ast.Expr) Expr {
+func (hb *hirBuilder) expr(expr ast.Expr) Expr {
 	switch expr := expr.(type) {
 	case *ast.Ident:
-		return conv.ident(expr)
+		return hb.ident(expr)
 	case *ast.BasicLit:
-		return conv.basicLit(expr)
+		return hb.basicLit(expr)
 	case *ast.ParenExpr:
-		return conv.parenExpr(expr)
+		return hb.parenExpr(expr)
 	case *ast.BinaryExpr:
-		return conv.binaryExpr(expr)
+		return hb.binaryExpr(expr)
 	case *ast.CallExpr:
-		return conv.callExpr(expr)
+		return hb.callExpr(expr)
 
 	default:
 		panic(fmt.Sprintf("unhandled expr: %T", expr))
 	}
 }
 
-func (conv *converter) ident(id *ast.Ident) Expr {
-	tv := conv.info.Types[id]
+func (hb *hirBuilder) ident(id *ast.Ident) Expr {
+	tv := hb.info.Types[id]
 	if tv.Value != nil {
 		switch tv.Value.Kind() {
 		case constant.Int:
@@ -109,15 +101,15 @@ func (conv *converter) ident(id *ast.Ident) Expr {
 		return &Nil{Typ: tv.Type}
 	}
 
-	obj, ok := conv.info.ObjectOf(id).(*types.Var)
+	obj, ok := hb.info.ObjectOf(id).(*types.Var)
 	if !ok || obj == nil {
 		panic(fmt.Sprintf("unexpected nil object for %s", id.Name))
 	}
 	return &Var{Obj: obj, Pos: id.Pos()}
 }
 
-func (conv *converter) basicLit(lit *ast.BasicLit) Expr {
-	tv := conv.info.Types[lit]
+func (hb *hirBuilder) basicLit(lit *ast.BasicLit) Expr {
+	tv := hb.info.Types[lit]
 	switch tv.Value.Kind() {
 	case constant.Int:
 		v, exact := constant.Int64Val(tv.Value)
@@ -157,9 +149,9 @@ func (conv *converter) basicLit(lit *ast.BasicLit) Expr {
 
 }
 
-func (conv *converter) parenExpr(paren *ast.ParenExpr) Expr {
+func (hb *hirBuilder) parenExpr(paren *ast.ParenExpr) Expr {
 	// Reduce any amount of surrounding parenthesis to 1.
-	expr := conv.expr(astutil.Unparen(paren))
+	expr := hb.expr(astutil.Unparen(paren))
 
 	// Now assign parenthesis attribute.
 	switch expr := expr.(type) {
@@ -184,9 +176,9 @@ func (conv *converter) parenExpr(paren *ast.ParenExpr) Expr {
 	return expr
 }
 
-func (conv *converter) binaryExpr(e *ast.BinaryExpr) Expr {
-	x := conv.expr(e.X)
-	y := conv.expr(e.Y)
+func (hb *hirBuilder) binaryExpr(e *ast.BinaryExpr) Expr {
+	x := hb.expr(e.X)
+	y := hb.expr(e.Y)
 	switch e.Op {
 	case token.ADD:
 		return &OpAdd{Pos: e.Pos(), LHS: x, RHS: y}
@@ -198,31 +190,31 @@ func (conv *converter) binaryExpr(e *ast.BinaryExpr) Expr {
 	}
 }
 
-func (conv *converter) callExpr(call *ast.CallExpr) Expr {
-	if typep.IsTypeExpr(conv.info, call.Fun) {
-		typ := conv.info.TypeOf(call)
+func (hb *hirBuilder) callExpr(call *ast.CallExpr) Expr {
+	if typep.IsTypeExpr(hb.info, call.Fun) {
+		typ := hb.info.TypeOf(call)
 		return &TypeConv{
 			Typ: typ,
 			Pos: call.Pos(),
-			Arg: conv.expr(call.Args[0]),
+			Arg: hb.expr(call.Args[0]),
 		}
 	}
 
 	panic("can't handle normal calls yet")
 }
 
-func (conv *converter) stmt(stmt ast.Stmt) Stmt {
+func (hb *hirBuilder) stmt(stmt ast.Stmt) Stmt {
 	switch stmt := stmt.(type) {
 	case *ast.BlockStmt:
-		return conv.blockStmt(stmt)
+		return hb.blockStmt(stmt)
 	case *ast.AssignStmt:
-		return conv.assignStmt(stmt)
+		return hb.assignStmt(stmt)
 	case *ast.DeclStmt:
-		return conv.declStmt(stmt)
+		return hb.declStmt(stmt)
 	case *ast.ReturnStmt:
 		return &Return{
 			Pos:     stmt.Pos(),
-			Results: conv.exprList(stmt.Results),
+			Results: hb.exprList(stmt.Results),
 		}
 
 	default:
@@ -230,7 +222,7 @@ func (conv *converter) stmt(stmt ast.Stmt) Stmt {
 	}
 }
 
-func (conv *converter) declStmt(stmt *ast.DeclStmt) Stmt {
+func (hb *hirBuilder) declStmt(stmt *ast.DeclStmt) Stmt {
 	decl := stmt.Decl.(*ast.GenDecl)
 	switch decl.Tok {
 	case token.VAR:
@@ -239,7 +231,7 @@ func (conv *converter) declStmt(stmt *ast.DeclStmt) Stmt {
 		list := make([]*Assign, len(decl.Specs))
 		for i, spec := range decl.Specs {
 			spec := spec.(*ast.ValueSpec)
-			list[i] = conv.specToAssign(spec)
+			list[i] = hb.specToAssign(spec)
 			if spec.Type != nil {
 				types[i] = spec.Type
 			}
@@ -259,7 +251,7 @@ func (conv *converter) declStmt(stmt *ast.DeclStmt) Stmt {
 	}
 }
 
-func (conv *converter) specToAssign(spec *ast.ValueSpec) *Assign {
+func (hb *hirBuilder) specToAssign(spec *ast.ValueSpec) *Assign {
 	out := &Assign{
 		Pos: spec.Pos(),
 		LHS: make([]Expr, len(spec.Names)),
@@ -269,28 +261,28 @@ func (conv *converter) specToAssign(spec *ast.ValueSpec) *Assign {
 			out.LHS[i] = &Blank{Pos: id.Pos()}
 			continue
 		}
-		def, ok := conv.info.Defs[id].(*types.Var)
+		def, ok := hb.info.Defs[id].(*types.Var)
 		if ok {
 			out.Defs = append(out.Defs, def)
 		}
-		out.LHS[i] = conv.expr(id)
+		out.LHS[i] = hb.expr(id)
 	}
 	if len(spec.Values) == 0 {
 		out.RHS = make([]Expr, len(spec.Names))
-		typ := conv.info.TypeOf(spec.Type)
+		typ := hb.info.TypeOf(spec.Type)
 		for i := range spec.Names {
-			out.RHS[i] = conv.makeZeroVal(spec.Names[i].Pos(), typ)
+			out.RHS[i] = hb.makeZeroVal(spec.Names[i].Pos(), typ)
 		}
 	} else {
 		out.RHS = make([]Expr, len(spec.Values))
 		for i, rhs := range spec.Values {
-			out.RHS[i] = conv.expr(rhs)
+			out.RHS[i] = hb.expr(rhs)
 		}
 	}
 	return out
 }
 
-func (conv *converter) makeZeroVal(pos token.Pos, typ types.Type) Expr {
+func (hb *hirBuilder) makeZeroVal(pos token.Pos, typ types.Type) Expr {
 	switch typ := typ.Underlying().(type) {
 	case *types.Basic:
 		switch flags := typ.Info(); {
@@ -307,7 +299,7 @@ func (conv *converter) makeZeroVal(pos token.Pos, typ types.Type) Expr {
 	panic(fmt.Sprintf("can't make zero value for %s", typ.String()))
 }
 
-func (conv *converter) assignStmt(assign *ast.AssignStmt) *Assign {
+func (hb *hirBuilder) assignStmt(assign *ast.AssignStmt) *Assign {
 	out := &Assign{
 		Pos: assign.Pos(),
 		LHS: make([]Expr, len(assign.Lhs)),
@@ -319,15 +311,15 @@ func (conv *converter) assignStmt(assign *ast.AssignStmt) *Assign {
 				out.LHS[i] = &Blank{Pos: id.Pos()}
 				continue
 			}
-			def, ok := conv.info.Defs[id].(*types.Var)
+			def, ok := hb.info.Defs[id].(*types.Var)
 			if ok {
 				out.Defs = append(out.Defs, def)
 			}
 		}
-		out.LHS[i] = conv.expr(lhs)
+		out.LHS[i] = hb.expr(lhs)
 	}
 	for i, rhs := range assign.Rhs {
-		out.RHS[i] = conv.expr(rhs)
+		out.RHS[i] = hb.expr(rhs)
 	}
 	return out
 }
