@@ -37,10 +37,6 @@ type If struct {
 	Body *Block
 }
 
-// a = b
-// a, b := 1, 2
-//
-
 type VarDecl struct {
 	Pos      token.Pos
 	types    []ast.Expr
