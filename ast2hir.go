@@ -213,6 +213,10 @@ func (hb *hirBuilder) callExpr(call *ast.CallExpr) Expr {
 }
 
 func (hb *hirBuilder) stmt(stmt ast.Stmt) Stmt {
+	if stmt == nil {
+		return EmptyStmt
+	}
+
 	switch stmt := stmt.(type) {
 	case *ast.BlockStmt:
 		return hb.blockStmt(stmt)
@@ -220,6 +224,8 @@ func (hb *hirBuilder) stmt(stmt ast.Stmt) Stmt {
 		return hb.assignStmt(stmt)
 	case *ast.DeclStmt:
 		return hb.declStmt(stmt)
+	case *ast.IfStmt:
+		return hb.ifStmt(stmt)
 	case *ast.ReturnStmt:
 		return &Return{
 			Pos:     stmt.Pos(),
@@ -333,4 +339,40 @@ func (hb *hirBuilder) assignStmt(assign *ast.AssignStmt) *Assign {
 		out.RHS[i] = hb.expr(rhs)
 	}
 	return out
+}
+
+func (hb *hirBuilder) ifStmt(stmt *ast.IfStmt) Stmt {
+	first := hb.makeIf(stmt)
+	if stmt.Else == nil {
+		// Simple if, no IfElse wrapping is required.
+		return first
+	}
+
+	// Need to construct if-else chain.
+	out := &IfElse{
+		List: []*If{first},
+	}
+	branch := stmt.Else
+	for branch != nil {
+		switch stmt := branch.(type) {
+		case *ast.IfStmt:
+			out.List = append(out.List, hb.makeIf(stmt))
+			branch = stmt.Else
+		case *ast.BlockStmt:
+			out.Else = hb.blockStmt(stmt)
+			return out
+		default:
+			panic(fmt.Sprintf("unexpected %T inside if-else chain", stmt))
+		}
+	}
+	return out
+}
+
+func (hb *hirBuilder) makeIf(stmt *ast.IfStmt) *If {
+	return &If{
+		Pos:  stmt.Pos(),
+		Init: hb.stmt(stmt.Init),
+		Cond: hb.expr(stmt.Cond),
+		Body: hb.blockStmt(stmt.Body),
+	}
 }

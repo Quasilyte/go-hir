@@ -151,6 +151,31 @@ func (decl *VarDecl) GoStmt() ast.Stmt {
 	}
 }
 
+func (stmt *If) GoStmt() ast.Stmt {
+	return &ast.IfStmt{
+		Init: stmt.Init.GoStmt(),
+		Cond: stmt.Cond.GoExpr(),
+		Body: stmt.Body.GoStmt().(*ast.BlockStmt),
+	}
+}
+
+func (stmt *emptyStmt) GoStmt() ast.Stmt {
+	return nil
+}
+
+func (stmt *IfElse) GoStmt() ast.Stmt {
+	first := stmt.List[0].GoStmt().(*ast.IfStmt)
+	branch := first
+	for _, stmt := range stmt.List[1:] {
+		branch.Else = stmt.GoStmt()
+		branch = branch.Else.(*ast.IfStmt)
+	}
+	if stmt.Else != nil {
+		branch.Else = stmt.Else.GoStmt()
+	}
+	return first
+}
+
 func (tconv *TypeConv) GoExpr() ast.Expr {
 	return astWithParens(tconv.Parens, &ast.CallExpr{
 		Fun:  typeToAst(tconv.Typ),

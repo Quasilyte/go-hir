@@ -104,3 +104,45 @@ func typeConv() {
 	_ = (float64(x))
 	_ = (*int)(nil)
 }
+
+func ifelse() {
+	if true {
+		_ = 1
+	}
+
+	if x := 1; true {
+		_ = x
+	}
+
+	if true {
+		_ = 1
+	} else {
+		_ = 2
+	}
+
+	if x := 1; true {
+		_ = x
+	} else {
+		_ = x
+	}
+
+	if x := true; x {
+		_ = 1
+	} else if true {
+		_ = 2
+	} else if false {
+		_ = 3
+	} else {
+		_ = 4
+	}
+
+	if x := 1; true {
+		_ = x + 1
+	} else if x := 2; true {
+		_ = x + 2
+	} else if x := (3); true {
+		_ = (x + 3)
+	} else if x := 4; true {
+		_ = x + 4
+	}
+}

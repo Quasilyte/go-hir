@@ -10,6 +10,8 @@ type Stmt interface {
 	GoStmt() ast.Stmt
 }
 
+type emptyStmt struct{}
+
 type Block struct {
 	Pos token.Pos
 
@@ -20,6 +22,19 @@ type Return struct {
 	Pos token.Pos
 
 	Results []Expr
+}
+
+type IfElse struct {
+	List []*If
+	Else *Block
+}
+
+type If struct {
+	Pos token.Pos
+
+	Init Stmt
+	Cond Expr
+	Body *Block
 }
 
 // a = b
