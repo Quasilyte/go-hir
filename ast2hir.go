@@ -172,7 +172,11 @@ func (hb *hirBuilder) parenExpr(paren *ast.ParenExpr) Expr {
 		expr.Parens = true
 	case *OpAdd:
 		expr.Parens = true
+	case *OpSub:
+		expr.Parens = true
 	case *OpMul:
+		expr.Parens = true
+	case *OpQuo:
 		expr.Parens = true
 	case *Nil:
 		expr.Parens = true
@@ -191,8 +195,12 @@ func (hb *hirBuilder) binaryExpr(e *ast.BinaryExpr) Expr {
 	switch e.Op {
 	case token.ADD:
 		return &OpAdd{Pos: e.Pos(), LHS: x, RHS: y}
+	case token.SUB:
+		return &OpSub{Pos: e.Pos(), LHS: x, RHS: y}
 	case token.MUL:
 		return &OpMul{Pos: e.Pos(), LHS: x, RHS: y}
+	case token.QUO:
+		return &OpQuo{Pos: e.Pos(), LHS: x, RHS: y}
 
 	default:
 		panic(fmt.Sprintf("unhandled binary expr: %s", e.Op.String()))

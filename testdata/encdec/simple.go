@@ -91,11 +91,18 @@ func multiRet() (int, int) {
 	return 1, 2
 }
 
-func binaryExpr() {
+func opAddMul() {
 	_ = (1 + 2)
 	x := 1
 	y := 2
 	_ = (x*2)*y + 3
+}
+
+func opSubQuo(x, y int) {
+	_ = x - y - 1
+	_ = x - (1-2)/2
+	_ = 1 / (x - 4)
+	_ = (x / y) / 2
 }
 
 func typeConv() {

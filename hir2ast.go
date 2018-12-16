@@ -94,9 +94,25 @@ func (op *OpAdd) GoExpr() ast.Expr {
 	})
 }
 
+func (op *OpSub) GoExpr() ast.Expr {
+	return astWithParens(op.Parens, &ast.BinaryExpr{
+		Op: token.SUB,
+		X:  op.LHS.GoExpr(),
+		Y:  op.RHS.GoExpr(),
+	})
+}
+
 func (op *OpMul) GoExpr() ast.Expr {
 	return astWithParens(op.Parens, &ast.BinaryExpr{
 		Op: token.MUL,
+		X:  op.LHS.GoExpr(),
+		Y:  op.RHS.GoExpr(),
+	})
+}
+
+func (op *OpQuo) GoExpr() ast.Expr {
+	return astWithParens(op.Parens, &ast.BinaryExpr{
+		Op: token.QUO,
 		X:  op.LHS.GoExpr(),
 		Y:  op.RHS.GoExpr(),
 	})

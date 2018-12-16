@@ -91,7 +91,23 @@ type (
 		RHS Expr
 	}
 
+	OpSub struct {
+		Pos    token.Pos
+		Parens bool
+
+		LHS Expr
+		RHS Expr
+	}
+
 	OpMul struct {
+		Pos    token.Pos
+		Parens bool
+
+		LHS Expr
+		RHS Expr
+	}
+
+	OpQuo struct {
 		Pos    token.Pos
 		Parens bool
 
@@ -128,6 +144,10 @@ func (bval *BoolVal) Type() types.Type {
 
 func (op *OpAdd) Type() types.Type { return op.LHS.Type() }
 
+func (op *OpSub) Type() types.Type { return op.LHS.Type() }
+
 func (op *OpMul) Type() types.Type { return op.LHS.Type() }
+
+func (op *OpQuo) Type() types.Type { return op.LHS.Type() }
 
 func (tconv *TypeConv) Type() types.Type { return tconv.Typ }
