@@ -3,6 +3,7 @@ package encdec
 const iconst = 102
 const fconst = 1.4
 const sconst = "493c"
+const bconst = true
 
 func typedNil() *int {
 	return (nil)
@@ -73,6 +74,17 @@ func stringVal() {
 	_ = (x)
 
 	_ = sconst
+}
+
+func boolVal() {
+	_ = true
+	_ = (false)
+
+	var x bool
+	(x) = true
+	_ = (x)
+
+	_ = bconst
 }
 
 func multiRet() (int, int) {

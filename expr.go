@@ -70,6 +70,16 @@ type (
 
 		Val string
 	}
+
+	BoolVal struct {
+		Typ types.Type
+
+		Pos    token.Pos
+		Parens bool
+		Source ast.Expr
+
+		Val bool
+	}
 )
 
 type (
@@ -110,6 +120,10 @@ func (fval *FloatVal) Type() types.Type {
 
 func (sval *StringVal) Type() types.Type {
 	return sval.Typ
+}
+
+func (bval *BoolVal) Type() types.Type {
+	return bval.Typ
 }
 
 func (op *OpAdd) Type() types.Type { return op.LHS.Type() }

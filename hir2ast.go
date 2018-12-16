@@ -75,6 +75,17 @@ func (v *StringVal) GoExpr() ast.Expr {
 	})
 }
 
+func (v *BoolVal) GoExpr() ast.Expr {
+	if v.Source != nil {
+		return astWithParens(v.Parens, v.Source)
+	}
+
+	return astWithParens(v.Parens, &ast.BasicLit{
+		Kind:  token.STRING,
+		Value: fmt.Sprint(v.Val),
+	})
+}
+
 func (op *OpAdd) GoExpr() ast.Expr {
 	return astWithParens(op.Parens, &ast.BinaryExpr{
 		Op: token.ADD,

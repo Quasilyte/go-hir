@@ -92,6 +92,14 @@ func (hb *hirBuilder) ident(id *ast.Ident) Expr {
 				Source: id,
 			}
 
+		case constant.Bool:
+			return &BoolVal{
+				Pos:    id.Pos(),
+				Typ:    tv.Type,
+				Val:    constant.BoolVal(tv.Value),
+				Source: id,
+			}
+
 		default:
 			panic(fmt.Sprintf("unhandled const kind: %v", tv.Value.Kind()))
 		}
@@ -146,7 +154,6 @@ func (hb *hirBuilder) basicLit(lit *ast.BasicLit) Expr {
 	default:
 		panic(fmt.Sprintf("unhandled const kind: %v", tv.Value.Kind()))
 	}
-
 }
 
 func (hb *hirBuilder) parenExpr(paren *ast.ParenExpr) Expr {
@@ -160,6 +167,8 @@ func (hb *hirBuilder) parenExpr(paren *ast.ParenExpr) Expr {
 	case *FloatVal:
 		expr.Parens = true
 	case *StringVal:
+		expr.Parens = true
+	case *BoolVal:
 		expr.Parens = true
 	case *OpAdd:
 		expr.Parens = true
@@ -292,6 +301,8 @@ func (hb *hirBuilder) makeZeroVal(pos token.Pos, typ types.Type) Expr {
 			return &FloatVal{Typ: typ, Pos: pos}
 		case flags&types.IsString != 0:
 			return &StringVal{Typ: typ, Pos: pos}
+		case flags&types.IsBoolean != 0:
+			return &BoolVal{Typ: typ, Pos: pos}
 		}
 	case *types.Pointer:
 		return &Nil{Typ: typ}
